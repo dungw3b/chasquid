@@ -32,6 +32,7 @@ import (
 	"blitiri.com.ar/go/chasquid/internal/tlsconst"
 	"blitiri.com.ar/go/chasquid/internal/trace"
 	"blitiri.com.ar/go/spf"
+	"encoding/base64"
 )
 
 // Exported variables.
@@ -233,7 +234,7 @@ func (c *Conn) Handle() {
 		c.tr.Debugf("haproxy handshake: %v -> %v", src, dst)
 	}
 
-	c.printfLine("220 %s ESMTP chasquid", c.hostname)
+	c.printfLine("220 %s ESMTP", c.hostname)
 
 	var cmd, params string
 	var err error
@@ -357,13 +358,14 @@ func (c *Conn) HELO(params string) (code int, msg string) {
 	}
 	c.ehloDomain = strings.Fields(params)[0]
 
-	types := []string{
+	/*types := []string{
 		"general store", "used armor dealership", "second-hand bookstore",
 		"liquor emporium", "antique weapons outlet", "delicatessen",
 		"jewelers", "quality apparel and accessories", "hardware",
 		"rare books", "lighting store"}
-	t := types[rand.Int()%len(types)]
-	msg = fmt.Sprintf("Hello my friend, welcome to chasqui's %s!", t)
+	t := types[rand.Int()%len(types)]*/
+	//msg = fmt.Sprintf("Hello my friend, welcome to chasqui's %s!", t)
+	msg = "You are welcome"
 
 	return 250, msg
 }
@@ -385,6 +387,7 @@ func (c *Conn) EHLO(params string) (code int, msg string) {
 	fmt.Fprintf(buf, "SIZE %d\n", c.maxDataSize)
 	if c.onTLS {
 		fmt.Fprintf(buf, "AUTH PLAIN\n")
+		fmt.Fprintf(buf, "AUTH LOGIN\n")
 	} else {
 		fmt.Fprintf(buf, "STARTTLS\n")
 	}
@@ -401,13 +404,14 @@ func (c *Conn) HELP(params string) (code int, msg string) {
 func (c *Conn) RSET(params string) (code int, msg string) {
 	c.resetEnvelope()
 
-	msgs := []string{
+	/*msgs := []string{
 		"Who was that Maud person anyway?",
 		"Thinking of Maud you forget everything else.",
 		"Your mind releases itself from mundane concerns.",
 		"As your mind turns inward on itself, you forget everything else.",
-	}
-	return 250, "2.0.0 " + msgs[rand.Int()%len(msgs)]
+	}*/
+	//return 250, "2.0.0 " + msgs[rand.Int()%len(msgs)]
+	return 250, "2.0.0 Ok"
 }
 
 // VRFY SMTP command handler.
@@ -754,7 +758,7 @@ func (c *Conn) addReceivedHeader() {
 			addrLiteral(c.remoteAddr), c.ehloDomain)
 	}
 
-	received += fmt.Sprintf("by %s (chasquid) ", c.hostname)
+	received += fmt.Sprintf("by %s", c.hostname)
 
 	// https://www.iana.org/assignments/mail-parameters/mail-parameters.xhtml#mail-parameters-7
 	with := "SMTP"
@@ -1152,10 +1156,11 @@ func (c *Conn) AUTH(params string) (code int, msg string) {
 	// If the response is not there, we reply with 334, and expect the
 	// response back from the client in the next message.
 
+	// Add supporting AUTH LOGIN by dungw3b
 	sp := strings.SplitN(params, " ", 2)
-	if len(sp) < 1 || sp[0] != "PLAIN" {
+	if len(sp) < 1 || (sp[0] != "PLAIN" && sp[0] != "LOGIN") {
 		// As we only offer plain, this should not really happen.
-		return 534, "5.7.9 Asmodeus demands 534 zorkmids for safe passage"
+		return 534, "5.7.9 The method is no supported"
 	}
 
 	// Note we use more "serious" error messages from now own, as these may
@@ -1163,25 +1168,52 @@ func (c *Conn) AUTH(params string) (code int, msg string) {
 
 	// Get the response, either from the message or interactively.
 	response := ""
-	if len(sp) == 2 {
-		response = sp[1]
-	} else {
-		// Reply 334 and expect the user to provide it.
-		// In this case, the text IS relevant, as it is taken as the
-		// server-side SASL challenge (empty for PLAIN).
-		// https://tools.ietf.org/html/rfc4954#section-4
-		err := c.writeResponse(334, "")
+	if sp[0] == "PLAIN" {
+		if len(sp) == 2 {
+			response = sp[1]
+		} else {
+			// Reply 334 and expect the user to provide it.
+			// In this case, the text IS relevant, as it is taken as the
+			// server-side SASL challenge (empty for PLAIN).
+			// https://tools.ietf.org/html/rfc4954#section-4
+			err := c.writeResponse(334, "")
+			if err != nil {
+				return 554, fmt.Sprintf("5.4.0 Error writing AUTH 334: %v", err)
+			}
+
+			response, err = c.readLine()
+			if err != nil {
+				return 554, fmt.Sprintf("5.4.0 Error reading AUTH response: %v", err)
+			}
+		}
+		//c.tr.Errorf("DEBUG PLAIN: %s", response)
+	} else if sp[0] == "LOGIN" {
+		err := c.writeResponse(334, "VXNlcm5hbWU6")
 		if err != nil {
 			return 554, fmt.Sprintf("5.4.0 Error writing AUTH 334: %v", err)
 		}
-
-		response, err = c.readLine()
+		luser, err := c.readLine()
 		if err != nil {
 			return 554, fmt.Sprintf("5.4.0 Error reading AUTH response: %v", err)
 		}
+		err = c.writeResponse(334, "UGFzc3dvcmQ6")
+		if err != nil {
+                        return 554, fmt.Sprintf("5.4.0 Error writing AUTH 334: %v", err)
+                }
+		lpass, err := c.readLine()
+                if err != nil {
+                        return 554, fmt.Sprintf("5.4.0 Error reading AUTH response: %v", err)
+                }
+		response, err = combineBase64(luser, lpass)
+		if err != nil {
+			return 501, fmt.Sprintf("5.5.2 Error decoding AUTH response: %v", err)
+		}
+		//c.tr.Errorf("DEBUG LOGIN: %s", response)
 	}
 
+	//c.tr.Errorf("DEBUG: %s", response)
 	user, domain, passwd, err := auth.DecodeResponse(response)
+	//c.tr.Errorf("DEBUG: %s|%s|%s", user, domain, passwd)
 	if err != nil {
 		// https://tools.ietf.org/html/rfc4954#section-4
 		return 501, fmt.Sprintf("5.5.2 Error decoding AUTH response: %v", err)
@@ -1295,4 +1327,28 @@ func writeResponse(w io.Writer, code int, msg string) error {
 	}
 
 	return nil
+}
+
+// Add supporting AUTH LOGIN by dungw3b
+func combineBase64(user string, pass string) (string, error) {
+	var b bytes.Buffer
+
+	buf, err := base64.StdEncoding.DecodeString(user)
+	if err != nil {
+		return "", err
+	}
+	user = string(buf)
+	buf, err = base64.StdEncoding.DecodeString(pass)
+	if err != nil {
+                return "", err
+        }
+	pass = string(buf)
+
+	//b.WriteString(user)
+	b.WriteByte(byte(0))
+	b.WriteString(user)
+	b.WriteByte(byte(0))
+	b.WriteString(pass)
+	str := base64.StdEncoding.EncodeToString(b.Bytes())
+	return str, nil
 }
