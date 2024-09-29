@@ -400,6 +400,9 @@ func (item *Item) deliver(q *Queue, rcpt *Recipient) (err error, permanent bool)
 
 	deliverAttempts.Add("email:remote", 1)
 	from := item.From
+	
+	/*
+	Remove this due SPF softfail from GMAIL by dungweb
 	if !envelope.DomainIn(item.From, q.localDomains) {
 		// We're sending from a non-local to a non-local. This should
 		// happen only when there's an alias to forward email to a
@@ -416,6 +419,7 @@ func (item *Item) deliver(q *Queue, rcpt *Recipient) (err error, permanent bool)
 			strings.Replace(from, "@", "=", -1),
 			mustIDNAToASCII(envelope.DomainOf(rcpt.OriginalAddress)))
 	}
+	*/
 	return q.remoteC.Deliver(from, rcpt.Address, item.Data)
 }
 

@@ -236,6 +236,30 @@ func DecodeResponse(response string) (user, domain, passwd string, err error) {
 	return
 }
 
+// Suppor method AUTH LOGIN by dungw3b
+func ConcatBase64(user string, pass string) (string, error) {
+	var b bytes.Buffer
+
+	buf, err := base64.StdEncoding.DecodeString(user)
+	if err != nil {
+		return "", err
+	}
+	user = string(buf)
+	buf, err = base64.StdEncoding.DecodeString(pass)
+	if err != nil {
+                return "", err
+        }
+	pass = string(buf)
+
+	//b.WriteString(user)
+	b.WriteByte(byte(0))
+	b.WriteString(user)
+	b.WriteByte(byte(0))
+	b.WriteString(pass)
+	str := base64.StdEncoding.EncodeToString(b.Bytes())
+	return str, nil
+}
+
 // WrapNoErrorBackend wraps a NoErrorBackend, converting it into a valid
 // Backend. This is normally used in Auth.Register calls, to register no-error
 // backends.

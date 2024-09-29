@@ -32,7 +32,6 @@ import (
 	"blitiri.com.ar/go/chasquid/internal/tlsconst"
 	"blitiri.com.ar/go/chasquid/internal/trace"
 	"blitiri.com.ar/go/spf"
-	"encoding/base64"
 )
 
 // Exported variables.
@@ -737,6 +736,7 @@ func (c *Conn) DATA(params string) (code int, msg string) {
 		"In return to thy service, I grant thee the gift of Immortality!",
 		"You ascend to the status of Demigod(dess)...",
 	}
+
 	return 250, "2.0.0 " + msgs[rand.Int()%len(msgs)]
 }
 
@@ -1187,6 +1187,7 @@ func (c *Conn) AUTH(params string) (code int, msg string) {
 			}
 		}
 		//c.tr.Errorf("DEBUG PLAIN: %s", response)
+	// Add method AUTH LOGIN by dungw3b
 	} else if sp[0] == "LOGIN" {
 		err := c.writeResponse(334, "VXNlcm5hbWU6")
 		if err != nil {
@@ -1204,7 +1205,7 @@ func (c *Conn) AUTH(params string) (code int, msg string) {
                 if err != nil {
                         return 554, fmt.Sprintf("5.4.0 Error reading AUTH response: %v", err)
                 }
-		response, err = combineBase64(luser, lpass)
+		response, err = auth.ConcatBase64(luser, lpass)
 		if err != nil {
 			return 501, fmt.Sprintf("5.5.2 Error decoding AUTH response: %v", err)
 		}
@@ -1327,28 +1328,4 @@ func writeResponse(w io.Writer, code int, msg string) error {
 	}
 
 	return nil
-}
-
-// Add supporting AUTH LOGIN by dungw3b
-func combineBase64(user string, pass string) (string, error) {
-	var b bytes.Buffer
-
-	buf, err := base64.StdEncoding.DecodeString(user)
-	if err != nil {
-		return "", err
-	}
-	user = string(buf)
-	buf, err = base64.StdEncoding.DecodeString(pass)
-	if err != nil {
-                return "", err
-        }
-	pass = string(buf)
-
-	//b.WriteString(user)
-	b.WriteByte(byte(0))
-	b.WriteString(user)
-	b.WriteByte(byte(0))
-	b.WriteString(pass)
-	str := base64.StdEncoding.EncodeToString(b.Bytes())
-	return str, nil
 }
