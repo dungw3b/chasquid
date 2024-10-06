@@ -8,7 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"math/rand"
+	//"math/rand"
 	"net"
 	"net/mail"
 	"os"
@@ -385,8 +385,7 @@ func (c *Conn) EHLO(params string) (code int, msg string) {
 	fmt.Fprintf(buf, "ENHANCEDSTATUSCODES\n")
 	fmt.Fprintf(buf, "SIZE %d\n", c.maxDataSize)
 	if c.onTLS {
-		fmt.Fprintf(buf, "AUTH PLAIN\n")
-		fmt.Fprintf(buf, "AUTH LOGIN\n")
+		fmt.Fprintf(buf, "AUTH PLAIN LOGIN\n")
 	} else {
 		fmt.Fprintf(buf, "STARTTLS\n")
 	}
@@ -729,15 +728,15 @@ func (c *Conn) DATA(params string) (code int, msg string) {
 	// so clients can send other emails right away without needing to RSET.
 	c.resetEnvelope()
 
-	msgs := []string{
+	/*msgs := []string{
 		"You offer the Amulet of Yendor to Anhur...",
 		"An invisible choir sings, and you are bathed in radiance...",
 		"The voice of Anhur booms out: Congratulations, mortal!",
 		"In return to thy service, I grant thee the gift of Immortality!",
 		"You ascend to the status of Demigod(dess)...",
-	}
+	}*/
 
-	return 250, "2.0.0 " + msgs[rand.Int()%len(msgs)]
+	return 250, "2.0.0 Ok with ID "+ msgID
 }
 
 func (c *Conn) addReceivedHeader() {
